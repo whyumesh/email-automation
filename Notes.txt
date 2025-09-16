@@ -1,0 +1,229 @@
+Perfect 👍 Since you’re taking over this project, let me explain it like a handover note so you clearly understand what it does, how it’s structured, and where you’ll likely work.
+
+
+---
+
+🔹 Project Overview
+
+This project automates sample request status reporting across different management levels in Abbott:
+
+TBMs (Territory Business Managers) → Get their own requests
+
+ABMs (Area Business Managers) → Get reports of all TBMs under them
+
+ZBMs/Marketing Heads → Get consolidated division/affiliate-level reports
+
+
+The system:
+
+1. Reads master data files (Excel/CSV).
+
+
+2. Cleans & formats them (dates, missing values).
+
+
+3. Creates pivot tables & summaries.
+
+
+4. Generates Excel attachments where needed.
+
+
+5. Uses HTML email templates (via Jinja2) for professional formatting.
+
+
+6. Sends emails via Outlook (win32com.client).
+
+
+
+
+---
+
+🔹 Scripts & Their Roles
+
+1. Email_Automation_V4.py
+
+Audience: TBMs
+
+Logic:
+
+Groups data by Input Sample Request: Created Alias (the TBM code).
+
+Prepares row-wise details (doctor, SKU, qty, dispatch, delivery, transporter, etc.).
+
+Renders email_template_V4.html.
+
+Sends email to TBM (one per TBM).
+
+
+No Excel attachment, just HTML body.
+
+
+
+---
+
+2. Email_Automation_V4 - ABM.py
+
+Audience: ABMs (+ ZBMs CC’d)
+
+Logic:
+
+Groups data by ABM Emp Code.
+
+Creates Excel file for each ABM containing TBM-level requests.
+
+Sends email:
+
+To = ABM
+
+CC = ZBM (if available)
+
+Attachment = Excel file
+
+
+Uses email_template_ABM_V4.html (but mostly just body + attachment).
+
+
+
+
+---
+
+3. email_template_MARKETING_V2.py
+
+Audience: Marketing Heads / Division Heads
+
+Logic:
+
+Builds pivot tables at division level.
+
+Calculates counts of requests by status:
+
+Dispatched, Pending, In-Transit, Delivered, Out of stock, Returned, Incomplete address, Doctor refused, etc.
+
+
+Generates division-wise Excel summary files.
+
+Uses email_template_MARKETING - Tabular.html to render summary tables inside email.
+
+Sends email:
+
+To = Division heads (from Affiliate wise Email I’D.xlsx)
+
+CC/BCC = fixed addresses (corporate team).
+
+Attachment = division Excel report.
+
+
+
+
+
+---
+
+🔹 Data Files Involved
+
+Input Data Files
+
+TBM & ABM Automation Email 1209252.xlsx → Source for TBM & ABM scripts
+
+Marketing Head - ( Division Wise) 10092025.csv → Source for Marketing script
+
+Affiliate wise Email I’D.xlsx → Mapping of division codes to email IDs
+
+
+Email Templates
+
+email_template_V4.html → TBM
+
+email_template_ABM_V4.html → ABM
+
+email_template_MARKETING - Tabular.html → Marketing
+
+
+
+
+---
+
+🔹 Output
+
+TBM emails → HTML body only (individual request details).
+
+ABM emails → Excel attachment + body.
+
+Marketing emails → Division-wise summary in email + Excel attachment.
+
+
+
+---
+
+🔹 Tech Stack
+
+Python Libraries:
+
+pandas → data cleaning & grouping
+
+openpyxl + xlsxwriter → Excel file generation
+
+jinja2 → HTML email templates
+
+win32com.client → Outlook automation (sending emails)
+
+
+Outlook dependency:
+
+Needs to run on a system with MS Outlook installed & configured.
+
+Emails go out as if sent from EPD_SFA@abbott.com.
+
+
+
+
+---
+
+🔹 As New Owner, What You’ll Do
+
+1. Understand Data Flows
+
+Ensure input files (.xlsx & .csv) are updated correctly by whoever supplies them.
+
+Validate column names (these scripts rely on exact column names).
+
+
+
+2. Maintain Templates
+
+If management wants changes in email format → edit .html templates, not Python code.
+
+
+
+3. Modify Filters/Logic
+
+If reporting structure changes (new ABM, new division, new affiliate), update mappings in Excel or filters in script.
+
+
+
+4. Troubleshoot
+
+If a script fails → check input file path, missing columns, or Outlook connectivity.
+
+
+
+5. Automate Execution
+
+Currently manual run. You can later schedule via Windows Task Scheduler or an internal automation tool.
+
+
+
+
+
+---
+
+✅ Hierarchy Summary:
+
+TBM script → Sends request details to each TBM
+ABM script → Sends TBM details (Excel) to each ABM (cc ZBM)
+Marketing script → Sends division summary (Excel + email table) to Marketing heads
+
+
+---
+
+Would you like me to now create a visual flow diagram (Org-level) that shows who gets what email/report? That will help you present this project easily in meetings.
+
