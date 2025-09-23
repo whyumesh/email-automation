@@ -1,4 +1,3 @@
-
 import pandas as pd
 
 # Load Excel
@@ -22,11 +21,16 @@ for _, row in sheet2.iterrows():
 # Group statuses by request ID
 grouped = sheet1.groupby("Assigned Request Ids")["Request Status"].apply(list).reset_index()
 
-# Match logic
+# Deduplicate statuses for both display and matching
+def dedup_statuses(status_list):
+    return sorted(set(status_list), key=str)
+
 def get_final_answer(status_list):
     key = tuple(sorted(set(normalize(s) for s in status_list)))
     return rules.get(key, "❌ No matching rule")
 
+# Apply deduplication
+grouped["Request Status"] = grouped["Request Status"].apply(dedup_statuses)
 grouped["Final Answer"] = grouped["Request Status"].apply(get_final_answer)
 
 # Save output
