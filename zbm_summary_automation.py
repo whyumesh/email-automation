@@ -36,7 +36,7 @@ def create_zbm_summary():
     print("🧹 Cleaning and preparing data...")
     
     # Ensure required columns exist
-    required_columns = ['ABM Terr Code', 'TBM HQ', 'Input Sample Request: Created By',
+    required_columns = ['ABM Terr Code', 'TBM HQ', 'ABM Name',
                         'Doctor: Customer Code', 'Assigned Request Ids', 'Request Status']
     missing = [c for c in required_columns if c not in df.columns]
     if missing:
@@ -44,10 +44,10 @@ def create_zbm_summary():
         return
 
     # Remove rows where key fields are null or empty
-    df = df.dropna(subset=['ABM Terr Code', 'TBM HQ', 'Input Sample Request: Created By'])
+    df = df.dropna(subset=['ABM Terr Code', 'TBM HQ', 'ABM Name'])
     df = df[df['ABM Terr Code'].astype(str).str.strip() != '']
     df = df[df['TBM HQ'].astype(str).str.strip() != '']
-    df = df[df['Input Sample Request: Created By'].astype(str).str.strip() != '']
+    df = df[df['ABM Name'].astype(str).str.strip() != '']
 
     # Restrict to specified TBM HQ cities
     allowed_hq = {"MUMBAI", "AHMEDABAD", "PUNE", "NAGPUR"}
@@ -133,7 +133,7 @@ def create_zbm_summary():
     # Determine which column to use for unique TBMs
     tbm_code_col = 'TBM Terr Code' if 'TBM Terr Code' in df.columns else 'ABM Terr Code'
 
-    aggregated = df.groupby(['Area Name', 'Input Sample Request: Created By']).agg({
+    aggregated = df.groupby(['Area Name', 'ABM Name']).agg({
         tbm_code_col: 'nunique',             # Unique TBMs
         'Doctor: Customer Code': 'nunique',  # Unique HCPs
         'Assigned Request Ids': 'nunique',   # Unique Requests
@@ -143,7 +143,7 @@ def create_zbm_summary():
     # Rename columns
     # rename using index to handle dynamic tbm_code_col
     aggregated = aggregated.rename(columns={
-        'Input Sample Request: Created By': 'ABM Name',
+        'ABM Name': 'ABM Name',
         tbm_code_col: 'Unique TBMs',
         'Doctor: Customer Code': 'Unique HCPs',
         'Assigned Request Ids': 'Unique Requests',
@@ -162,12 +162,12 @@ def create_zbm_summary():
             return sum(1 for status in statuses if status in status_list)
         
         # Apply the counting function
-        status_counts = df.groupby(['Area Name', 'Input Sample Request: Created By'], group_keys=False).apply(
+        status_counts = df.groupby(['Area Name', 'ABM Name'], group_keys=False).apply(
             lambda x: count_statuses_for_group(x)
         ).reset_index(name=f'count_{category_name}')
         
         # Merge with aggregated data
-        status_counts = status_counts.rename(columns={'Input Sample Request: Created By': 'ABM Name'})
+        status_counts = status_counts.rename(columns={'ABM Name': 'ABM Name'})
         aggregated = aggregated.merge(status_counts, on=['Area Name', 'ABM Name'], how='left')
     
     # Calculate derived metrics
@@ -184,10 +184,10 @@ def create_zbm_summary():
     aggregated['Sent to HUB'] = aggregated['count_delivered_return_action_pending']
     # Pending for Invoicing (D): unique count of requests where Request Status contains Action Pending / in Process
     d_counts = df.merge(grouped[['Assigned Request Ids', 'Has D Pending']], on='Assigned Request Ids', how='left') \
-                .groupby(['Area Name', 'Input Sample Request: Created By']) \
+                .groupby(['Area Name', 'ABM Name']) \
                 .apply(lambda x: x.loc[x['Has D Pending'] == True, 'Assigned Request Ids'].nunique()) \
                 .reset_index(name='Pending for Invoicing')
-    d_counts = d_counts.rename(columns={'Input Sample Request: Created By': 'ABM Name'})
+    d_counts = d_counts.rename(columns={'ABM Name': 'ABM Name'})
     aggregated = aggregated.merge(d_counts, on=['Area Name', 'ABM Name'], how='left')
     aggregated['Pending for Invoicing'] = aggregated['Pending for Invoicing'].fillna(0).astype(int)
     aggregated['Pending for Dispatch'] = aggregated['count_dispatch_pending']
