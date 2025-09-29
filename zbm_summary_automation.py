@@ -89,8 +89,20 @@ def create_zbm_summary():
             return any(normalize(s) == target for s in status_list)
         grouped['Has D Pending'] = grouped['Request Status'].apply(has_action_pending)
 
-        grouped.to_excel('final_output.xlsx', index=False)
-        print("✅ Final Answer per request saved to final_output.xlsx")
+        # Try to save with timestamp to avoid permission issues
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_file = f'final_output_{timestamp}.xlsx'
+        
+        try:
+            grouped.to_excel(output_file, index=False)
+            print(f"✅ Final Answer per request saved to {output_file}")
+        except PermissionError:
+            print("⚠️ Permission denied for Excel file. Trying alternative approach...")
+            # Save as CSV instead
+            csv_output = f'final_output_{timestamp}.csv'
+            grouped.to_csv(csv_output, index=False)
+            print(f"✅ Final Answer per request saved as CSV: {csv_output}")
+            print("💡 Note: Excel file may be open. Close it and run again for Excel format.")
 
         # Merge Final Answer back to main dataframe
         df = df.merge(grouped[['Assigned Request Ids', 'Final Answer']], on='Assigned Request Ids', how='left')
@@ -141,32 +153,32 @@ def create_zbm_summary():
 
         aggregated = aggregated.merge(status_counts, on=['Area Name', 'ABM Name'], how='left')
     
-    # Derived metrics
-    print("📊 Calculating derived metrics...")
+    # Derived metrics following template formulas exactly
+    print("📊 Calculating derived metrics following template formulas...")
 
-    aggregated['Requests Raised'] = aggregated['Unique Requests']  # (A+B+C)
-
-    # HO metrics
-    aggregated['Request Cancelled Out of Stock'] = aggregated['count_out_of_stock_on_hold']
-    aggregated['Action Pending at HO'] = aggregated['count_action_pending']
+    # HO metrics (A + B)
+    aggregated['Request Cancelled Out of Stock'] = aggregated['count_out_of_stock_on_hold']  # A
+    aggregated['Action Pending at HO'] = aggregated['count_action_pending']  # B
     
-    # HUB metrics
-    aggregated['Sent to HUB'] = aggregated['count_delivered_return_action_pending']
-
+    # HUB metrics (D + E + F)
     d_counts = df.merge(grouped[['Assigned Request Ids', 'Has D Pending']], on='Assigned Request Ids', how='left') \
                 .groupby(['Area Name', 'ABM Name']) \
                 .apply(lambda x: x.loc[x['Has D Pending'] == True, 'Assigned Request Ids'].nunique()) \
                 .reset_index(name='Pending for Invoicing')
     aggregated = aggregated.merge(d_counts, on=['Area Name', 'ABM Name'], how='left')
-    aggregated['Pending for Invoicing'] = aggregated['Pending for Invoicing'].fillna(0).astype(int)
-
-    aggregated['Pending for Dispatch'] = aggregated['count_dispatch_pending']
-    aggregated['Requests Dispatched'] = aggregated['count_delivered'] + aggregated['count_dispatched_in_transit'] + aggregated['count_rto']
+    aggregated['Pending for Invoicing'] = aggregated['Pending for Invoicing'].fillna(0).astype(int)  # D
     
-    # Delivery Status
-    aggregated['Delivered'] = aggregated['count_delivered']
-    aggregated['Dispatched In Transit'] = aggregated['count_dispatched_in_transit']
-    aggregated['RTO'] = aggregated['count_rto']
+    aggregated['Pending for Dispatch'] = aggregated['count_dispatch_pending']  # E
+    
+    # Delivery Status (G + H + I)
+    aggregated['Delivered'] = aggregated['count_delivered']  # G
+    aggregated['Dispatched In Transit'] = aggregated['count_dispatched_in_transit']  # H
+    aggregated['RTO'] = aggregated['count_rto']  # I
+    
+    # Calculate derived metrics using template formulas
+    aggregated['Requests Dispatched'] = aggregated['Delivered'] + aggregated['Dispatched In Transit'] + aggregated['RTO']  # F = G + H + I
+    aggregated['Sent to HUB'] = aggregated['Pending for Invoicing'] + aggregated['Pending for Dispatch'] + aggregated['Requests Dispatched']  # C = D + E + F
+    aggregated['Requests Raised'] = aggregated['Request Cancelled Out of Stock'] + aggregated['Action Pending at HO'] + aggregated['Sent to HUB']  # A + B + C
     
     # RTO Reasons (placeholders)
     aggregated['Incomplete Address'] = 0
@@ -192,8 +204,8 @@ def create_zbm_summary():
     final_summary.to_csv(csv_output, index=False)
     print(f"💾 Saved summary data to {csv_output} for verification")
     
-    # Write values into template ZBM sheet
-    print("💾 Writing values into template ZBM sheet (preserving formatting)...")
+    # Write values into template ZBM sheet with exact format matching
+    print("💾 Writing values into template ZBM sheet (exact format matching)...")
     
     try:
         from openpyxl import load_workbook
@@ -202,40 +214,103 @@ def create_zbm_summary():
         wb = load_workbook('zbm_summary.xlsx')
         ws = wb['ZBM']
 
-        start_row = 4
-        start_col = 2
-
-        col_order = summary_columns
-
-        max_clear_rows = max(len(final_summary) + 50, 200)
-        for r in range(start_row, start_row + max_clear_rows):
-            for c in range(start_col, start_col + len(col_order)):
+        # Preserve original sheet formatting
+        print("📋 Preserving original template formatting...")
+        
+        # Protect template structure - don't modify rows 1-3 (headers)
+        data_start_row = 3  # Data starts from row 4 (index 3)
+        max_clear_rows = max(len(final_summary) + 10, 100)
+        
+        # Clear only data area (columns B to S, rows 4 onwards) - preserve headers
+        for r in range(data_start_row + 1, data_start_row + max_clear_rows):
+            for c in range(2, 20):  # Columns B to S
                 ws.cell(row=r, column=c).value = None
 
+        # Define exact column mapping based on template analysis
+        column_mapping = {
+            'Area Name': 2,           # Column B - ABM Terr Code
+            'ABM Name': 3,           # Column C - Input Sample Request: Created By
+            'Unique TBMs': 4,        # Column D - Doctor: Customer Code (should be NaN in template)
+            'Unique HCPs': 5,        # Column E - unique count of (Doctor: Customer Code)
+            'Requests Raised': 6,    # Column F - unique count of (Assigned Request Ids)
+            'Request Cancelled Out of Stock': 7,  # Column G - HO section
+            'Action Pending at HO': 8,            # Column H - HO section
+            'Sent to HUB': 9,                    # Column I - HUB section
+            'Pending for Invoicing': 10,         # Column J - HUB section
+            'Pending for Dispatch': 11,          # Column K - HUB section
+            'Requests Dispatched': 12,           # Column L - Delivery Status
+            'Delivered': 13,                     # Column M - Delivery Status
+            'Dispatched In Transit': 14,         # Column N - Delivery Status
+            'RTO': 15,                           # Column O - Delivery Status
+            'Incomplete Address': 16,            # Column P - RTO Reasons
+            'Doctor Non Contactable': 17,        # Column Q - RTO Reasons
+            'Doctor Refused to Accept': 18,      # Column R - RTO Reasons
+            'Hold Delivery': 19                  # Column S - RTO Reasons
+        }
+
         def copy_row_style(src_row_idx, dst_row_idx):
-            for c in range(start_col, start_col + len(col_order)):
+            """Copy formatting from source row to destination row"""
+            for c in range(2, 20):  # Columns B to S
                 src = ws.cell(row=src_row_idx, column=c)
                 dst = ws.cell(row=dst_row_idx, column=c)
                 dst.number_format = src.number_format
-                from openpyxl.styles import Font
-                dst.font = Font(name='Calibri', size=10, bold=True, color=src.font.color)
+                # Preserve original font formatting exactly
+                dst.font = copy_style(src.font)
                 dst.alignment = copy_style(src.alignment)
                 dst.border = copy_style(src.border)
                 dst.fill = copy_style(src.fill)
 
+        # Write data rows
         for i in range(len(final_summary)):
-            target_row = start_row + i
+            target_row = data_start_row + 1 + i  # Start from row 4
             if target_row > ws.max_row:
                 ws.insert_rows(target_row)
-            copy_row_style(start_row, target_row)
-            for j, col_name in enumerate(col_order):
-                ws.cell(row=target_row, column=start_col + j).value = (
-                    None if col_name not in final_summary.columns else final_summary.at[i, col_name]
-                )
+            
+            # Copy formatting from template row 4
+            copy_row_style(4, target_row)
+            
+            # Write data according to exact column mapping
+            for col_name, col_num in column_mapping.items():
+                if col_name in final_summary.columns:
+                    value = final_summary.at[i, col_name]
+                    ws.cell(row=target_row, column=col_num).value = value
+            
+            # Set Column 4 (# Unique TBMs) to NaN as per template
+            ws.cell(row=target_row, column=4).value = None
+
+        # Add total row
+        total_row = data_start_row + 1 + len(final_summary)
+        if total_row > ws.max_row:
+            ws.insert_rows(total_row)
+        
+        # Copy formatting for total row
+        copy_row_style(4, total_row)
+        
+        # Write totals
+        ws.cell(row=total_row, column=2).value = None  # Empty first column
+        ws.cell(row=total_row, column=3).value = "Total"
+        
+        # Calculate and write totals for each column
+        for col_name, col_num in column_mapping.items():
+            if col_name in final_summary.columns and col_name not in ['Area Name', 'ABM Name']:
+                total_value = final_summary[col_name].sum()
+                ws.cell(row=total_row, column=col_num).value = total_value
+        
+        # Set Column 4 (# Unique TBMs) to NaN in total row as per template
+        ws.cell(row=total_row, column=4).value = None
 
         new_excel_file = f"zbm_summary_updated_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        wb.save(new_excel_file)
-        print(f"✅ Successfully created updated Excel file with formatting preserved: {new_excel_file}")
+        
+        try:
+            wb.save(new_excel_file)
+            print(f"✅ Successfully created updated Excel file with formatting preserved: {new_excel_file}")
+        except PermissionError:
+            print("⚠️ Permission denied for Excel file. Trying alternative approach...")
+            # Save as CSV instead
+            csv_output = f"zbm_summary_updated_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            final_summary.to_csv(csv_output, index=False)
+            print(f"✅ Summary data saved as CSV: {csv_output}")
+            print("💡 Note: Excel file may be open. Close it and run again for Excel format.")
         
         print("\n📊 Summary Statistics:")
         print(f"   Total ABM Territories: {len(final_summary)}")
