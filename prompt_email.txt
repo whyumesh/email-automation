@@ -1,0 +1,1 @@
+i have table in my excel file and want to send it to certain email i'd on automation. the list of email i'd to send is saved in an email.xlsx file. in email.xlsx file we have 2 columns, column 1 is "To" and column 2 is "cc". write a python script to send the only table from the file to all the email in the email.xlsx file.
